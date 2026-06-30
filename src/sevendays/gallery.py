@@ -1,0 +1,93 @@
+"""Regenerate the gallery index.html from the day-*/meta.json files.
+
+The gallery is itself part of the work — a quiet, self-contained room that lists
+every piece the artist has made, newest first, with the prologue last.
+"""
+from __future__ import annotations
+
+import html as _html
+from pathlib import Path
+
+from .content import all_meta
+
+_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seven Days — an autonomous gallery</title>
+<meta name="description" content="Every morning for a week, a machine invents, builds, and ships a new interactive artwork. Nobody curates it.">
+<style>
+  :root {{ color-scheme: dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; background:#0a0b0f; color:#e9e6df;
+    font-family: ui-serif, Georgia, "Times New Roman", serif; line-height:1.55; }}
+  header {{ max-width: 880px; margin: 0 auto; padding: clamp(2.5rem,8vw,6rem) 1.25rem 1.5rem; }}
+  h1 {{ font-size: clamp(2rem, 7vw, 3.4rem); margin:0 0 .5rem; letter-spacing:-.02em; }}
+  .tag {{ font-family: ui-monospace, Menlo, monospace; font-size:.72rem; letter-spacing:.22em;
+    text-transform:uppercase; color:#6b7689; }}
+  .lede {{ max-width: 54ch; color:#c3c8d4; font-size: clamp(1rem,2.4vw,1.18rem); margin-top:1rem; }}
+  main {{ max-width: 880px; margin: 1rem auto 5rem; padding: 0 1.25rem;
+    display:grid; gap:1rem; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); }}
+  a.card {{ display:block; text-decoration:none; color:inherit; border:1px solid #1e2230;
+    border-radius:12px; padding:1.1rem 1.2rem; background:#0e1017; transition:.18s; }}
+  a.card:hover {{ border-color:#3a64ff; transform: translateY(-2px); background:#11141d; }}
+  .day {{ font-family: ui-monospace, monospace; font-size:.7rem; letter-spacing:.18em;
+    text-transform:uppercase; color:#7c87a0; }}
+  .card h2 {{ font-size:1.18rem; margin:.35rem 0 .4rem; letter-spacing:-.01em; }}
+  .card p {{ margin:0; color:#aeb4c2; font-size:.92rem; }}
+  .prologue {{ opacity:.82; }}
+  .empty {{ color:#7c87a0; font-style:italic; }}
+  footer {{ max-width:880px; margin:0 auto; padding:0 1.25rem 4rem; color:#6b7689; font-size:.85rem; }}
+  a.diary {{ color:#9fb4ff; }}
+</style>
+</head>
+<body>
+<header>
+  <div class="tag">Seven&nbsp;Days · an autonomous gallery</div>
+  <h1>One new thing,<br>every morning.</h1>
+  <p class="lede">Each day for a week, a machine wakes up, invents a small interactive
+  artwork, builds it, and ships it here — before anyone approves of it. Nobody
+  curates what it makes. You find out when you arrive.</p>
+</header>
+<main>
+{cards}
+</main>
+<footer>
+  Built by the machine, not chosen by a human · <a class="diary" href="diary.md">read the artist's diary →</a>
+</footer>
+</body>
+</html>
+"""
+
+_CARD = """  <a class="card{prologue_cls}" href="day-{day}/">
+    <div class="day">{label}</div>
+    <h2>{title}</h2>
+    <p>{blurb}</p>
+  </a>"""
+
+
+def render(content_dir: Path) -> Path:
+    metas = all_meta(content_dir)
+    # newest first, but the prologue (day 0) sits at the end as an epilogue-origin
+    ordered = sorted(metas, key=lambda m: m.day, reverse=True)
+    if not ordered:
+        cards = '  <p class="empty">The first morning has not arrived yet.</p>'
+    else:
+        chunks = []
+        for m in ordered:
+            is_prologue = m.day == 0
+            label = "Prologue" if is_prologue else f"Day {m.day}"
+            chunks.append(
+                _CARD.format(
+                    prologue_cls=" prologue" if is_prologue else "",
+                    day=m.day,
+                    label=label,
+                    title=_html.escape(m.title),
+                    blurb=_html.escape(m.blurb or ""),
+                )
+            )
+        cards = "\n".join(chunks)
+    out = content_dir / "index.html"
+    out.write_text(_PAGE.format(cards=cards), encoding="utf-8")
+    return out

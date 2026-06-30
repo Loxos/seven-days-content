@@ -1,0 +1,21 @@
+[project]
+name = "seven-days"
+version = "0.1.0"
+description = "An autonomous creature that invents, builds, and ships a new absurd interactive web artifact every morning."
+requires-python = ">=3.12"
+# Deliberately zero runtime dependencies: the engine speaks HTTP via the stdlib
+# (urllib) so the container stays tiny and the supply chain stays empty.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

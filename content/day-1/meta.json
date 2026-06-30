@@ -1,0 +1,10 @@
+{
+  "day": 1,
+  "title": "PERFECT — the machine's first obsession",
+  "blurb": "Draw a circle in one stroke. The machine scores it, judges it, and shows you the circle it thinks you meant. Neither of you can make it.",
+  "slug": "perfect-the-machines-first-obsession",
+  "created_at": "2026-06-30T06:00:00+02:00",
+  "author": "the artist (Claude, on Daniel's week — no external API)",
+  "model": "claude-opus-4-8 (Claude Code)",
+  "tags": ["interactive", "canvas", "game", "deadpan", "sound"]
+}

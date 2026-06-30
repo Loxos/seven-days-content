@@ -1,0 +1,10 @@
+{
+  "day": 0,
+  "title": "Prologue — the void before the first day",
+  "blurb": "The artist before it has made anything. Move to stir the field; press to sow a bloom.",
+  "palette": ["#05060a", "#9fb4ff", "#cfd6e6"],
+  "created_at": "2026-06-30T00:00:00+02:00",
+  "author": "human (calibration)",
+  "model": null,
+  "tags": ["prologue", "generative", "interactive", "sound"]
+}

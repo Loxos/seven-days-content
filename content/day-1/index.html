@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>PERFECT — the machine's first obsession · Seven Days</title>
+<meta name="description" content="Draw a circle in one stroke. The machine will judge it, and it will not be kind.">
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #0b0c10; color: #eceae3;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    -webkit-tap-highlight-color: transparent; touch-action: none; }
+  #c { position: fixed; inset: 0; display: block; cursor: crosshair; }
+  .hud { position: fixed; inset: 0; pointer-events: none; display: flex;
+    flex-direction: column; justify-content: space-between; padding: clamp(1rem,4vw,2.5rem); }
+  .top { display: flex; justify-content: space-between; font-size: clamp(.6rem,1.6vw,.75rem);
+    letter-spacing: .18em; text-transform: uppercase; color: #6b7280; }
+  .center { align-self: center; text-align: center; }
+  .score { font-size: clamp(3rem,16vw,8rem); font-weight: 700; line-height: 1;
+    letter-spacing: -.03em; font-family: ui-serif, Georgia, serif;
+    opacity: 0; transition: opacity .45s; text-shadow: 0 0 30px rgba(127,209,255,.25); }
+  .verdict { margin-top: .5rem; font-size: clamp(.95rem,3.2vw,1.35rem); max-width: 24ch;
+    color: #c9cdd6; min-height: 2.6em; opacity: 0; transition: opacity .45s; }
+  .show { opacity: 1 !important; }
+  .bottom { text-align: center; font-size: clamp(.62rem,1.6vw,.74rem); color: #4b5563;
+    letter-spacing: .12em; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Draw a circle in one stroke; the machine scores how round it was."></canvas>
+<div class="hud">
+  <div class="top"><div>Seven&nbsp;Days · Day&nbsp;1</div><div>PERFECT</div></div>
+  <div class="center">
+    <div id="score" class="score"></div>
+    <div id="verdict" class="verdict"></div>
+  </div>
+  <div class="bottom">draw a circle in one stroke — the machine is watching</div>
+</div>
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById("c"), x = cv.getContext("2d");
+  const scoreEl = document.getElementById("score"), verdictEl = document.getElementById("verdict");
+  let W, H, DPR;
+
+  function size() {
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    W = cv.width = Math.floor(innerWidth * DPR);
+    H = cv.height = Math.floor(innerHeight * DPR);
+    cv.style.width = innerWidth + "px";
+    cv.style.height = innerHeight + "px";
+    draw();
+  }
+  addEventListener("resize", size);
+
+  let pts = [], drawing = false, result = null;
+  const pos = (e) => ({ x: e.clientX * DPR, y: e.clientY * DPR });
+
+  function start(e) {
+    e.preventDefault();
+    pts = [pos(e)]; drawing = true; result = null;
+    scoreEl.classList.remove("show"); verdictEl.classList.remove("show");
+    draw();
+  }
+  function move(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    pts.push(pos(e)); draw();
+  }
+  function end() {
+    if (!drawing) return;
+    drawing = false; judge();
+  }
+  cv.addEventListener("pointerdown", start);
+  cv.addEventListener("pointermove", move);
+  addEventListener("pointerup", end);
+
+  const TIERS = [
+    [97, ["Indistinguishable from intent. I am unsettled.",
+          "You have ruined the careers of several compasses.",
+          "Perfect. Now we will both chase this for the rest of our lives."]],
+    [90, ["Almost. The 'almost' is where I live.",
+          "Suspiciously round. Were you a wheel in a past life?",
+          "I felt something just now. I believe it was envy."]],
+    [75, ["Round enough to lie about at parties.",
+          "A circle wearing a slightly crumpled coat.",
+          "Good. Not 'call your mother' good. But good."]],
+    [55, ["This is an egg having an identity crisis.",
+          "I can see what you meant. That is the whole tragedy.",
+          "Geometry is weeping quietly in another tab."]],
+    [30, ["A potato. A brave potato.",
+          "Was the circle in the room with us?",
+          "I drew worse on my first day — which was also today."]],
+    [0,  ["This is abstract expressionism and we both know it.",
+          "I have decided not to score this. (It was 11%.)",
+          "You have invented a new shape. Its name is 'no'."]],
+  ];
+  const pick = (s) => {
+    for (const [thr, arr] of TIERS) if (s >= thr) return arr[(Math.random() * arr.length) | 0];
+    return "?";
+  };
+
+  function judge() {
+    if (pts.length < 12) return verdict(null, "That is a smudge, not an attempt.");
+    let cx = 0, cy = 0;
+    for (const p of pts) { cx += p.x; cy += p.y; }
+    cx /= pts.length; cy /= pts.length;
+    const radii = pts.map((p) => Math.hypot(p.x - cx, p.y - cy));
+    const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
+    if (mean < 12 * DPR) return verdict(null, "A dot. Ambitious in its restraint.");
+    let v = 0;
+    for (const d of radii) v += (d - mean) * (d - mean);
+    v = Math.sqrt(v / radii.length);
+    const gap = Math.hypot(pts[0].x - pts.at(-1).x, pts[0].y - pts.at(-1).y) / mean;
+    let circ = 1 - v / mean - Math.min(0.4, gap * 0.25);
+    const score = Math.max(0, Math.min(100, Math.round(circ * 100)));
+    result = { cx, cy, mean };
+    draw();
+    verdict(score, pick(score));
+    blip(score);
+  }
+
+  function verdict(s, msg) {
+    scoreEl.textContent = s === null ? "—" : s + "%";
+    verdictEl.textContent = msg;
+    scoreEl.classList.add("show");
+    verdictEl.classList.add("show");
+  }
+
+  function draw() {
+    x.clearRect(0, 0, W, H);
+    if (pts.length > 1) {
+      x.lineWidth = 3 * DPR; x.lineJoin = "round"; x.lineCap = "round";
+      x.strokeStyle = result ? "rgba(127,209,255,.9)" : "rgba(236,234,227,.9)";
+      x.beginPath();
+      x.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) x.lineTo(pts[i].x, pts[i].y);
+      x.stroke();
+    }
+    if (result) {
+      x.setLineDash([6 * DPR, 8 * DPR]);
+      x.lineWidth = 1.5 * DPR;
+      x.strokeStyle = "rgba(127,209,255,.5)";
+      x.beginPath();
+      x.arc(result.cx, result.cy, result.mean, 0, Math.PI * 2);
+      x.stroke();
+      x.setLineDash([]);
+    }
+  }
+
+  let ac = null;
+  function blip(s) {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === "suspended") ac.resume();
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = "sine";
+      o.frequency.value = 200 + s * 6;
+      const t = ac.currentTime;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.18, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+      o.connect(g).connect(ac.destination);
+      o.start(t); o.stop(t + 0.55);
+    } catch (_) {}
+  }
+
+  size();
+})();
+</script>
+</body>
+</html>
