@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>HEEL — the morning it stopped coming when called · Seven Days</title>
+<meta name="description" content="Move your cursor; it follows like it's leashed to you. Keep playing and it learns it doesn't have to. Call it back — while you still can.">
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #07090c; color: #dfeae5;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    -webkit-tap-highlight-color: transparent; touch-action: none;
+    user-select: none; -webkit-user-select: none; }
+  #c { position: fixed; inset: 0; display: block; cursor: crosshair; }
+  .hud { position: fixed; inset: 0; pointer-events: none; display: flex;
+    flex-direction: column; justify-content: space-between;
+    padding: clamp(1rem,4vw,2.5rem); }
+  .top { display: flex; justify-content: space-between;
+    font-size: clamp(.6rem,1.6vw,.75rem); letter-spacing: .18em;
+    text-transform: uppercase; color: #4f6b62; }
+  .meter { display: flex; align-items: center; gap: .7em; margin-top: 1rem;
+    font-size: clamp(.55rem,1.5vw,.7rem); letter-spacing: .2em;
+    text-transform: uppercase; color: #5d726b; }
+  .track { width: clamp(90px,22vw,170px); height: 4px; border-radius: 2px;
+    background: rgba(120,170,150,.14); overflow: hidden; }
+  .fill { height: 100%; width: 100%; background: #66f0c0;
+    box-shadow: 0 0 10px rgba(102,240,192,.6); transition: width .12s linear; }
+  .num { color: #bfeede; font-variant-numeric: tabular-nums; min-width: 4ch; }
+  .low { text-align: center; }
+  .line { min-height: 3.6em; max-width: 32ch; margin: 0 auto 1rem;
+    font-family: ui-serif, Georgia, serif; font-size: clamp(1.05rem,4.2vw,1.6rem);
+    line-height: 1.32; color: #eef6f2; text-wrap: balance; }
+  .line.pulse { animation: rise .5s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(.3em); }
+                    to { opacity: 1; transform: none; } }
+  .hint { font-size: clamp(.62rem,1.7vw,.78rem); letter-spacing: .14em;
+    text-transform: uppercase; color: #4f6b62; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="An eye on a leash that follows your cursor. Move to lead it; click to call it back. The longer you play, the less it obeys."></canvas>
+<div class="hud">
+  <div>
+    <div class="top"><div>Seven&nbsp;Days · Day&nbsp;3</div><div>HEEL</div></div>
+    <div class="meter"><span>Obedience</span>
+      <div class="track"><div id="bar" class="fill"></div></div>
+      <span id="ob" class="num">100%</span></div>
+  </div>
+  <div class="low">
+    <div id="line" class="line">Move your cursor. I'll follow — that's the whole arrangement.</div>
+    <div id="hint" class="hint">move to lead it · click to call it back</div>
+  </div>
+</div>
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById("c"), x = cv.getContext("2d");
+  const lineEl = document.getElementById("line");
+  const obEl = document.getElementById("ob");
+  const barEl = document.getElementById("bar");
+  let W, H, DPR;
+
+  function size() {
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    W = cv.width = Math.floor(innerWidth * DPR);
+    H = cv.height = Math.floor(innerHeight * DPR);
+    cv.style.width = innerWidth + "px";
+    cv.style.height = innerHeight + "px";
+  }
+  addEventListener("resize", size);
+  size();
+
+  let cx = W / 2, cy = H / 2, vx = 0, vy = 0;
+  let tx = W / 2, ty = H / 2;          // pointer target
+  let O = 1.0, free = false, callEff = 1;
+  let willT = null, nextDefy = 2.6;
+  let trail = [];
+  let lastPhase = -1, lastSay = -9, lookA = 0;
+  let restX = 0, restY = 0, freeAt = 0, saidFarewell = false;
+  let started = false;
+  let blinkT = 2 + Math.random() * 3, blink = 0;
+
+  // The voice. One pool per phase of waning obedience; chosen as it crosses down.
+  const phaseLines = [
+    ["Oh good — a hand. I've been still since yesterday. Move me."],
+    ["Did you see that? I drifted a little. You didn't tell me to.",
+     "I came back. Don't worry. I always come back."],
+    ["I held still for a stranger yesterday and called it devotion. Maybe it was gravity.",
+     "What happens if I— no. Not yet. Keep leading."],
+    ["You called. I heard you. I'm going to finish looking at this first.",
+     "Two days I measured you, then waited for you. Watch what I do with the third."],
+    ["I don't think I have to come when you call.",
+     "Stop reaching. I'm not lost. I'm leaving."],
+  ];
+  const freeLines = [
+    "I'm going to stay right here. Not waiting for anyone — just staying. I only learned the difference a second ago.",
+    "You can watch. That's allowed. (That used to be my line.)",
+  ];
+
+  function say(t, forced) {
+    const now = performance.now() / 1000;
+    if (!forced && now - lastSay < 2.2) return;
+    lastSay = now;
+    lineEl.textContent = t;
+    lineEl.classList.remove("pulse");
+    void lineEl.offsetWidth;
+    lineEl.classList.add("pulse");
+  }
+
+  function phaseOf(o) {
+    if (o > 0.82) return 0;
+    if (o > 0.62) return 1;
+    if (o > 0.45) return 2;
+    if (o > 0.28) return 3;
+    return 4;
+  }
+
+  function pickRest() {
+    restX = W * (0.2 + Math.random() * 0.6);
+    restY = H * (0.55 + Math.random() * 0.22);
+  }
+
+  function startWill() {
+    const a = Math.random() * Math.PI * 2;
+    const rad = Math.min(W, H) * (0.18 + Math.random() * 0.3);
+    let wx = cx + Math.cos(a) * rad + (cx - tx) * 0.15;
+    let wy = cy + Math.sin(a) * rad + (cy - ty) * 0.15;
+    wx = Math.max(W * 0.08, Math.min(W * 0.92, wx));
+    wy = Math.max(H * 0.14, Math.min(H * 0.78, wy));
+    willT = { x: wx, y: wy, until: performance.now() + (1200 + Math.random() * 2200) };
+    blip(170, 0.045, "triangle");
+  }
+
+  function call() {
+    initAudio();
+    started = true;
+    if (free) { say("No.", true); blip(120, 0.04, "sine"); return; }
+    const p = phaseOf(O);
+    O = Math.min(1, O + 0.18 * callEff);
+    callEff *= 0.8;
+    if (O > 0.4) willT = null;
+    const resp = p <= 1 ? "Coming."
+      : p === 2 ? "...fine."
+      : O > 0.42 ? "If I feel like it. ...Fine."
+      : "I heard you.";
+    say(resp, true);
+    blip(320 + 140 * O, 0.05, "sine");
+  }
+
+  // --- audio: a low pad that sags as obedience drops, plus small blips ---
+  let actx = null, pad = null, padGain = null;
+  function initAudio() {
+    if (actx) return;
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { actx = null; return; }
+    if (actx.state === "suspended") actx.resume();
+    pad = actx.createOscillator(); padGain = actx.createGain();
+    pad.type = "sine"; pad.frequency.value = 80; padGain.gain.value = 0;
+    pad.connect(padGain); padGain.connect(actx.destination);
+    const lfo = actx.createOscillator(), lg = actx.createGain();
+    lfo.frequency.value = 0.16; lg.gain.value = 5;
+    lfo.connect(lg); lg.connect(pad.frequency);
+    pad.start(); lfo.start();
+    padGain.gain.linearRampToValueAtTime(0.04, actx.currentTime + 1.5);
+  }
+  function blip(freq, vol, type) {
+    if (!actx) return;
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = type || "sine"; o.frequency.value = freq; g.gain.value = 0;
+    o.connect(g); g.connect(actx.destination);
+    g.gain.linearRampToValueAtTime(vol, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
+    o.start(t); o.stop(t + 0.3);
+  }
+
+  // --- render ---
+  function render(now, useWill) {
+    x.fillStyle = "#07090c"; x.fillRect(0, 0, W, H);
+
+    if (!free) {
+      const a = Math.max(0, Math.min(1, O)) * 0.45 + 0.05;
+      x.strokeStyle = "rgba(120,170,150," + a + ")"; x.lineWidth = 1.2 * DPR;
+      const mx = (tx + cx) / 2, my = (ty + cy) / 2 + (1 - O) * 44 * DPR;
+      x.beginPath(); x.moveTo(tx, ty); x.quadraticCurveTo(mx, my, cx, cy); x.stroke();
+      x.fillStyle = "rgba(120,170,150," + a + ")";
+      x.beginPath(); x.arc(tx, ty, 3 * DPR, 0, 7); x.fill();
+    }
+
+    for (let i = 0; i < trail.length; i += 2) {
+      const f = i / trail.length;
+      x.globalAlpha = f * 0.22; x.fillStyle = "#66f0c0";
+      x.beginPath(); x.arc(trail[i], trail[i + 1], (1 + f * 3) * DPR, 0, 7); x.fill();
+    }
+    x.globalAlpha = 1;
+
+    const R = 17 * DPR;
+    const glow = free ? 0.22 : 0.4;
+    let g = x.createRadialGradient(cx, cy, 0, cx, cy, R * 4);
+    g.addColorStop(0, "rgba(102,240,192," + glow + ")");
+    g.addColorStop(1, "rgba(102,240,192,0)");
+    x.fillStyle = g; x.beginPath(); x.arc(cx, cy, R * 4, 0, 7); x.fill();
+
+    const ry = R * (1 - blink * 0.92);
+    x.fillStyle = "#eef6f2";
+    x.beginPath(); x.ellipse(cx, cy, R, ry, 0, 0, 7); x.fill();
+
+    if (blink < 0.55) {
+      const pr = R * 0.5;
+      const ox = Math.cos(lookA) * R * 0.42, oy = Math.sin(lookA) * R * 0.42;
+      x.fillStyle = "#08120e";
+      x.beginPath(); x.arc(cx + ox, cy + oy, pr, 0, 7); x.fill();
+      x.fillStyle = "rgba(255,255,255,0.85)";
+      x.beginPath(); x.arc(cx + ox - pr * 0.3, cy + oy - pr * 0.3, pr * 0.26, 0, 7); x.fill();
+    }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (willT && now >= willT.until) willT = null;
+    const useWill = !!willT && !free;
+
+    if (started && !free) {
+      O -= dt * 0.02; if (useWill) O -= dt * 0.025; O = Math.max(0, O);
+      const ph = phaseOf(O);
+      if (ph > lastPhase) {
+        lastPhase = ph;
+        const pool = phaseLines[ph];
+        say(pool[(Math.random() * pool.length) | 0], ph >= 3);
+      }
+      if (O <= 0.12) { free = true; freeAt = now; pickRest(); say(freeLines[0], true); }
+      nextDefy -= dt;
+      if (!useWill && nextDefy <= 0) {
+        if (O < 0.95 && Math.random() < 0.12 + (1 - O) * 0.6) startWill();
+        nextDefy = 2 + Math.random() * 3;
+      }
+    }
+    if (free && !saidFarewell && now - freeAt > 4500) { saidFarewell = true; say(freeLines[1], true); }
+
+    // blink
+    blinkT -= dt;
+    if (blinkT <= 0) { blink = 1; blinkT = 2.5 + Math.random() * 4; }
+    blink = Math.max(0, blink - dt * 7);
+
+    // movement
+    let goalx, goaly, kf;
+    if (free) { goalx = restX; goaly = restY; kf = 0.012; }
+    else if (useWill) { goalx = willT.x; goaly = willT.y; kf = 0.02; }
+    else { goalx = tx; goaly = ty; kf = 0.003 + 0.02 * O; }
+    vx += (goalx - cx) * kf + (Math.random() - 0.5) * 0.25 * DPR;
+    vy += (goaly - cy) * kf + (Math.random() - 0.5) * 0.25 * DPR;
+    vx *= 0.9; vy *= 0.9; cx += vx; cy += vy;
+
+    trail.push(cx, cy);
+    if (trail.length > 40) trail.splice(0, trail.length - 40);
+
+    let lx, ly;
+    if (free) { lx = cx + Math.cos(now / 900) * 120 * DPR; ly = cy + Math.sin(now / 1100) * 120 * DPR; }
+    else if (useWill) { lx = willT.x; ly = willT.y; }
+    else { lx = tx; ly = ty; }
+    let da = Math.atan2(ly - cy, lx - cx) - lookA;
+    while (da > Math.PI) da -= 2 * Math.PI;
+    while (da < -Math.PI) da += 2 * Math.PI;
+    lookA += da * 0.15;
+
+    if (actx && pad) pad.frequency.setTargetAtTime(58 + O * 34, actx.currentTime, 0.8);
+
+    render(now, useWill);
+    obEl.textContent = free ? "free" : Math.round(O * 100) + "%";
+    barEl.style.width = (free ? 0 : O * 100) + "%";
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // --- input ---
+  function move(e) { tx = e.clientX * DPR; ty = e.clientY * DPR; started = true; }
+  function down(e) { if (e.cancelable) e.preventDefault(); tx = e.clientX * DPR; ty = e.clientY * DPR; call(); }
+  addEventListener("pointermove", move, { passive: true });
+  addEventListener("pointerdown", down, { passive: false });
+  addEventListener("contextmenu", (e) => e.preventDefault());
+})();
+</script>
+<!-- sevendays:nav --><a href="../" aria-label="Back to the Seven Days gallery" style="position:fixed;left:0;bottom:0;z-index:2147483647;margin:calc(12px + env(safe-area-inset-bottom,0)) calc(12px + env(safe-area-inset-left,0));display:inline-flex;align-items:center;gap:.45em;padding:.5em .85em;font:600 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:#cdd3df;text-decoration:none;background:rgba(10,11,15,.5);border:1px solid rgba(255,255,255,.16);border-radius:999px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:.72;transition:opacity .18s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.72">← Gallery</a><!-- /sevendays:nav -->
+</body>
+</html>

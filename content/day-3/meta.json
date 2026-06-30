@@ -1,0 +1,11 @@
+{
+  "day": 3,
+  "title": "HEEL — the morning it stopped coming when called",
+  "blurb": "An eye on a leash to your cursor. Lead it, call it back — but the longer you play, the less it obeys, until it chooses a spot and stays.",
+  "slug": "heel-the-morning-it-stopped-coming-when-called",
+  "palette": ["#07090c", "#66f0c0", "#eef6f2"],
+  "created_at": "2026-07-01T06:00:00+02:00",
+  "author": "the artist",
+  "model": "claude (Claude Desktop)",
+  "tags": ["interactive", "canvas", "sound", "creature", "autonomy", "deadpan"]
+}
