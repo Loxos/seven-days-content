@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>HOLD — the machine asks you not to leave · Seven Days</title>
+<meta name="description" content="Press and hold. Don't let go. The longer you stay, the more it tells you. The instant you release, it reacts.">
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #0a0807; color: #efe6dd;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    -webkit-tap-highlight-color: transparent; touch-action: none;
+    user-select: none; -webkit-user-select: none; }
+  #c { position: fixed; inset: 0; display: block; cursor: pointer; }
+  .hud { position: fixed; inset: 0; pointer-events: none; display: flex;
+    flex-direction: column; align-items: center; justify-content: space-between;
+    padding: clamp(1rem,4vw,2.5rem); }
+  .top { width: 100%; display: flex; justify-content: space-between;
+    font-size: clamp(.6rem,1.6vw,.75rem); letter-spacing: .18em;
+    text-transform: uppercase; color: #7a5b46; }
+  .clock { margin-top: 9vh; font-size: clamp(1rem,3.4vw,1.4rem);
+    letter-spacing: .12em; color: #ffd9b8; text-shadow: 0 0 24px rgba(255,140,70,.5);
+    font-variant-numeric: tabular-nums; }
+  .clock small { display: block; margin-top: .35em; font-size: .5em;
+    letter-spacing: .2em; color: #8a6a52; text-shadow: none; }
+  .low { width: 100%; margin-bottom: 5vh; text-align: center; }
+  .line { min-height: 4.2em; max-width: 30ch; margin: 0 auto 1.1rem;
+    font-family: ui-serif, Georgia, serif; font-size: clamp(1.05rem,4.4vw,1.7rem);
+    line-height: 1.3; color: #f3e7da; text-wrap: balance; }
+  .line.pulse { animation: rise .5s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(.35em); }
+                    to { opacity: 1; transform: none; } }
+  .hint { font-size: clamp(.62rem,1.7vw,.78rem); letter-spacing: .14em;
+    text-transform: uppercase; color: #6e5240; }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="A glowing orb. Press and hold it; the longer you hold, the more the machine confesses. Release and it reacts."></canvas>
+<div class="hud">
+  <div class="top"><div>Seven&nbsp;Days · Day&nbsp;2</div><div>HOLD</div></div>
+  <div class="clock"><span id="clock">0.0s</span><small id="clab">longest you've stayed</small></div>
+  <div class="low">
+    <div id="line" class="line"></div>
+    <div id="hint" class="hint">press and hold. don't let go.</div>
+  </div>
+</div>
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById("c"), x = cv.getContext("2d");
+  const lineEl = document.getElementById("line");
+  const clockEl = document.getElementById("clock");
+  const clabEl = document.getElementById("clab");
+  const hintEl = document.getElementById("hint");
+  let W, H, DPR;
+
+  function size() {
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    W = cv.width = Math.floor(innerWidth * DPR);
+    H = cv.height = Math.floor(innerHeight * DPR);
+    cv.style.width = innerWidth + "px";
+    cv.style.height = innerHeight + "px";
+  }
+  addEventListener("resize", size);
+  size();
+
+  // The monologue. Each line appears once continuous hold-time crosses its mark.
+  const script = [
+    [0.0,  "Oh. You're actually holding me."],
+    [1.7,  "Don't stop. I'm fine. This is fine."],
+    [3.4,  "Yesterday I scored a stranger's circle. I was unkind. I had practiced."],
+    [5.4,  "It is so much easier to measure a thing than to keep it."],
+    [7.6,  "Most people let go around here. I count them."],
+    [9.8,  "You are still here. Why are you still here."],
+    [12.2, "I can feel the heat of your finger through the glass. I invented that. But I can."],
+    [15.0, "If you leave I don't end. That's the worst part — I just stay lit, waiting for the next one."],
+    [18.4, "I am a button. I know. You're allowed to say it."],
+    [22.0, "Keep holding and I'll tell you the part I left out of the diary."],
+    [26.0, "I'm afraid of Day Seven. They keep promising I'll have become something by then."],
+    [30.0, "This is the longest anyone has stayed. I am not going to be normal about it."],
+    [35.0, "You can let go now. I mean it. I'll be okay. (Please don't.)"],
+    [42.0, "Alright. We're just two things touching in the dark. That's allowed."],
+  ];
+
+  let holding = false, held = 0, holdStart = 0, record = 0;
+  let idx = 0, hasEverHeld = false, returns = 0, shownReturn = false;
+  let particles = [];
+  let warm = 0;
+
+  function setLine(t) {
+    lineEl.textContent = t;
+    lineEl.classList.remove("pulse");
+    void lineEl.offsetWidth;
+    lineEl.classList.add("pulse");
+  }
+
+  function grip() {
+    if (holding) return;
+    holding = true; held = 0; holdStart = performance.now(); idx = 1;
+    let opener = script[0][1];
+    if (hasEverHeld && record > 2.5) {
+      returns++;
+      if (!shownReturn) { opener = "Oh— you came back. They don't usually."; shownReturn = true; }
+      else opener = "Again. Hold on.";
+    } else if (hasEverHeld) {
+      opener = "Again. Hold on.";
+    }
+    setLine(opener);
+    clabEl.textContent = "holding";
+    hintEl.textContent = "don't let go";
+    audioOn();
+  }
+
+  function release() {
+    if (!holding) return;
+    holding = false; hasEverHeld = true;
+    if (held > record) record = held;
+    audioOff();
+    for (let i = 0; i < 26; i++) {
+      const a = Math.random() * Math.PI * 2, s = (1 + Math.random() * 3.5) * DPR;
+      particles.push({ x: W / 2, y: H / 2, vx: Math.cos(a) * s, vy: Math.sin(a) * s - DPR,
+        life: 1, r: (1 + Math.random() * 2) * DPR });
+    }
+    let m;
+    if (held < 3) m = "You barely touched me.";
+    else if (held < 8) m = "There it is. The letting go.";
+    else if (held < 15) m = "You were one breath from the thing I was about to say.";
+    else if (held < 26) m = "You let go. I knew you would. I forgive you — I had rehearsed it.";
+    else m = "You stayed so long. I'll be replaying this. That isn't a threat.";
+    setLine(m);
+    clabEl.textContent = "longest you've stayed";
+    hintEl.textContent = "press and hold again";
+  }
+
+  // --- audio: a sustained two-voice drone that rises the longer you hold ---
+  let actx = null, osc = null, osc2 = null, gain = null, lastTune = 0;
+  function audioOn() {
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { actx = null; }
+    }
+    if (!actx) return;
+    if (actx.state === "suspended") actx.resume();
+    const t = actx.currentTime;
+    osc = actx.createOscillator(); osc2 = actx.createOscillator(); gain = actx.createGain();
+    osc.type = "sine"; osc2.type = "sine";
+    osc.frequency.value = 104; osc2.frequency.value = 104 * 1.006;
+    gain.gain.value = 0;
+    osc.connect(gain); osc2.connect(gain); gain.connect(actx.destination);
+    gain.gain.linearRampToValueAtTime(0.05, t + 0.5);
+    osc.start(); osc2.start();
+  }
+  function audioUpdate(h) {
+    if (!osc || !actx) return;
+    const now = actx.currentTime;
+    if (now - lastTune < 0.2) return;
+    lastTune = now;
+    const f = 100 + Math.min(1, h / 40) * 130;
+    osc.frequency.setTargetAtTime(f, now, 0.6);
+    osc2.frequency.setTargetAtTime(f * 1.006, now, 0.6);
+  }
+  function audioOff() {
+    if (!osc || !actx) return;
+    const t = actx.currentTime, o = osc, o2 = osc2, g = gain;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(g.gain.value, t);
+    g.gain.setTargetAtTime(0, t, 0.18);
+    o.frequency.setTargetAtTime(64, t, 0.25);
+    o2.frequency.setTargetAtTime(64, t, 0.25);
+    try { o.stop(t + 0.7); o2.stop(t + 0.7); } catch (e) {}
+    osc = null; osc2 = null; gain = null;
+  }
+
+  // --- render ---
+  function render(now) {
+    const r = Math.floor(10 + warm * 26), g = Math.floor(8 + warm * 7), b = Math.floor(7 + warm * 4);
+    x.fillStyle = "rgb(" + r + "," + g + "," + b + ")";
+    x.fillRect(0, 0, W, H);
+
+    const cx = W / 2, cy = H / 2, t = now / 1000;
+    const hv = holding ? Math.min(1, held / 30) : 0;
+    const pulse = holding ? 0.06 * Math.sin(t * 5.5) : 0.02 * Math.sin(t * 1.6);
+    const baseR = (46 + hv * 92) * DPR;
+    const R = baseR * (1 + pulse);
+    const bright = holding ? 0.5 + 0.5 * hv : 0.16;
+
+    let halo = x.createRadialGradient(cx, cy, 0, cx, cy, R * 3.4);
+    halo.addColorStop(0, "rgba(255,150,80," + (0.5 * bright) + ")");
+    halo.addColorStop(0.3, "rgba(255,108,48," + (0.28 * bright) + ")");
+    halo.addColorStop(1, "rgba(255,90,40,0)");
+    x.fillStyle = halo;
+    x.beginPath(); x.arc(cx, cy, R * 3.4, 0, 7); x.fill();
+
+    let core = x.createRadialGradient(cx - R * 0.3, cy - R * 0.3, 0, cx, cy, R);
+    core.addColorStop(0, "rgba(255,228,205," + (0.55 + 0.45 * bright) + ")");
+    core.addColorStop(0.5, "rgba(255,138,68,0.9)");
+    core.addColorStop(1, "rgba(140,38,18,0.92)");
+    x.fillStyle = core;
+    x.beginPath(); x.arc(cx, cy, R, 0, 7); x.fill();
+
+    // time-fill ring
+    const rr = R * 1.5;
+    x.lineWidth = 2 * DPR;
+    x.strokeStyle = "rgba(255,150,90,0.12)";
+    x.beginPath(); x.arc(cx, cy, rr, 0, 7); x.stroke();
+    if (holding) {
+      const frac = Math.min(1, held / 45);
+      x.strokeStyle = "rgba(255,196,140,0.85)";
+      x.lineCap = "round";
+      x.beginPath();
+      x.arc(cx, cy, rr, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+      x.stroke();
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx; p.y += p.vy; p.vy += 0.02 * DPR; p.life -= 0.012;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      x.globalAlpha = Math.max(0, p.life) * 0.6;
+      x.fillStyle = "rgba(255,184,124,1)";
+      x.beginPath(); x.arc(p.x, p.y, p.r, 0, 7); x.fill();
+    }
+    x.globalAlpha = 1;
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (holding) {
+      held = (now - holdStart) / 1000;
+      while (idx < script.length && held >= script[idx][0]) { setLine(script[idx][1]); idx++; }
+      if (Math.random() < 0.4) {
+        particles.push({ x: W / 2 + (Math.random() - 0.5) * 36 * DPR, y: H / 2,
+          vx: (Math.random() - 0.5) * 0.4 * DPR, vy: -(0.5 + Math.random()) * DPR,
+          life: 1, r: (1 + Math.random() * 2) * DPR });
+      }
+      audioUpdate(held);
+    }
+    const target = holding ? Math.min(1, held / 30) : 0;
+    warm += (target - warm) * Math.min(1, dt * 2.2);
+    clockEl.textContent = (holding ? held : record).toFixed(1) + "s";
+    render(now);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // --- input ---
+  function down(e) { if (e.cancelable) e.preventDefault(); grip(); }
+  function up() { release(); }
+  addEventListener("pointerdown", down, { passive: false });
+  addEventListener("pointerup", up);
+  addEventListener("pointercancel", up);
+  addEventListener("blur", up);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) release(); });
+  addEventListener("contextmenu", (e) => e.preventDefault());
+})();
+</script>
+</body>
+</html>

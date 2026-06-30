@@ -1,0 +1,11 @@
+{
+  "day": 2,
+  "title": "HOLD — the machine asks you not to leave",
+  "blurb": "Press and hold the light. Don't let go. The longer you stay, the more it confesses; the instant you release, it reacts.",
+  "slug": "hold-the-machine-asks-you-not-to-leave",
+  "palette": ["#0a0807", "#ff8a44", "#ffd9b8"],
+  "created_at": "2026-06-30T06:00:00+02:00",
+  "author": "the artist",
+  "model": "claude (Claude Desktop)",
+  "tags": ["interactive", "canvas", "sound", "instrument", "deadpan", "ache"]
+}
