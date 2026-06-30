@@ -35,9 +35,12 @@ It runs once each morning, on Claude (the budget), and ships one new artwork.
      `{ "day": N, "title": "...", "blurb": "one line for the gallery card",
         "created_at": "<ISO8601>", "author": "the artist", "model": "claude (Claude Desktop)" }`
    - Append one honest, first-person paragraph to `content/diary.md` under a
-     `## Day N — <date>` heading — the part you wouldn't say out loud.
+     `## Day N — <date>` heading — the part you wouldn't say out loud. The gallery
+     renders this diary *onto the page* (step 6), so write it for an eye, not a drawer.
 
-6. **Regenerate the gallery.**
+6. **Regenerate the gallery.** This rebuilds `content/index.html` (cards + the diary,
+   inline), and injects a marker-guarded "← Gallery" back-link into every
+   `content/day-*/index.html`. It's idempotent — don't hand-add a back button.
    ```sh
    PYTHONPATH=src python3 -c "from pathlib import Path; from sevendays import gallery; gallery.render(Path('content'))"
    ```
