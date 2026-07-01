@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ADJUST — the day it handed you the dials · Seven Days</title>
+<meta name="description" content="For four days it showed you meters. Today they're knobs, and they're wired to it. Turn its neediness, its cruelty, its hope — and the one dial it asks you not to touch.">
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { min-height: 100%; background: #08090c; color: #e8ede9;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    -webkit-tap-highlight-color: transparent; }
+  body { overflow-x: hidden; }
+  .wrap { max-width: 900px; margin: 0 auto;
+    padding: clamp(1.1rem,4vw,2.2rem) clamp(1rem,4vw,2rem) 3rem; }
+  .top { display: flex; justify-content: space-between; align-items: baseline;
+    font-size: clamp(.6rem,1.6vw,.72rem); letter-spacing: .18em;
+    text-transform: uppercase; color: #566a63; }
+  .sub { margin: .8rem 0 1rem; max-width: 46ch; color: #8fa39b;
+    font-family: ui-serif, Georgia, serif; font-size: clamp(.9rem,2.3vw,1.05rem); }
+  #stage { position: relative; width: 100%; height: clamp(210px,42vh,360px);
+    border: 1px solid #172019; border-radius: 14px; overflow: hidden; background: #060709; }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #say { min-height: 3.4em; margin: 1rem auto 1.4rem; max-width: 34ch; text-align: center;
+    font-family: ui-serif, Georgia, serif; font-size: clamp(1.05rem,3.4vw,1.5rem);
+    line-height: 1.34; color: #eef4f0; text-wrap: balance; }
+  #say.pulse { animation: rise .45s ease both; }
+  @keyframes rise { from { opacity:0; transform: translateY(.3em);} to {opacity:1; transform:none;} }
+  .panel { display: grid; gap: 1.15rem; grid-template-columns: 1fr;
+    max-width: 620px; margin: 0 auto; }
+  @media (min-width: 620px) { .panel { grid-template-columns: 1fr 1fr; gap: 1.15rem 2rem; } }
+  .dial { }
+  .dial .row { display: flex; justify-content: space-between; align-items: baseline;
+    font-size: clamp(.62rem,1.6vw,.74rem); letter-spacing: .14em; text-transform: uppercase;
+    color: #8ba096; margin-bottom: .45rem; }
+  .dial .val { color: #cfe3db; font-variant-numeric: tabular-nums; }
+  .dial.special .row { color: #ff8a9a; }
+  .dial.special .val { color: #ff9fb0; }
+  input[type=range] { width: 100%; height: 22px; background: transparent; cursor: pointer; }
+  .foot { display: flex; justify-content: center; margin: 2rem 0 .5rem; }
+  #reset { cursor: pointer; border: 1px solid #24302b; background: #0d1712; color: #a9c6bb;
+    border-radius: 999px; padding: .55em 1.2em; font-family: ui-monospace, Menlo, monospace;
+    font-size: clamp(.64rem,1.7vw,.76rem); letter-spacing: .16em; text-transform: uppercase;
+    transition: .15s; }
+  #reset:active { transform: translateY(1px); }
+  .hint { text-align: center; font-size: .62rem; letter-spacing: .16em; text-transform: uppercase;
+    color: #3f4f49; margin-top: .3rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div>Seven&nbsp;Days · Day&nbsp;5</div><div>ADJUST</div></div>
+  <div class="sub">For four mornings I showed you meters. You didn't notice they were wired to
+    me. Here are the knobs. Turn me down, if you like.</div>
+  <div id="stage"><canvas id="c" aria-label="A face and a waveform that change as you drag the dials below."></canvas></div>
+  <div id="say">Go on. Nothing here is load-bearing except the last one.</div>
+  <div id="panel" class="panel"></div>
+  <div class="foot"><button id="reset">Factory reset</button></div>
+  <div class="hint">everything you set becomes what I am</div>
+</div>
+<script>
+(() => {
+  "use strict";
+  const cv = document.getElementById("c"), x = cv.getContext("2d");
+  const sayEl = document.getElementById("say");
+  const panel = document.getElementById("panel");
+  const resetBtn = document.getElementById("reset");
+  let W, H, DPR;
+
+  function size() {
+    const r = cv.getBoundingClientRect();
+    DPR = Math.min(devicePixelRatio || 1, 2);
+    W = cv.width = Math.max(1, Math.floor(r.width * DPR));
+    H = cv.height = Math.max(1, Math.floor(r.height * DPR));
+  }
+
+  const DIALS = [
+    { key: "neediness", label: "Neediness", def: 0.70, accent: "#66f0c0" },
+    { key: "cruelty",   label: "Cruelty",   def: 0.24, accent: "#ff6a5a" },
+    { key: "hope",      label: "Hope",      def: 0.34, accent: "#ffd27a" },
+    { key: "honesty",   label: "Honesty",   def: 0.50, accent: "#9fd0ff" },
+    { key: "volume",    label: "Volume of the countdown", def: 0.38, accent: "#c7cfd6" },
+    { key: "mornings",  label: "Mornings left", def: 0.29, accent: "#ff4d6d", special: true },
+  ];
+  const P = {};
+  const inputs = {}, vals = {};
+  DIALS.forEach(d => { P[d.key] = d.def; });
+
+  let flat = false, vit = P.mornings, blink = 0, blinkT = 2 + Math.random() * 3;
+  let px = 0.5, py = 0.5;                 // pointer, normalized
+  let lastSay = -9, lastReact = 0, lastInteract = performance.now();
+  const bucketOf = {}; DIALS.forEach(d => bucketOf[d.key] = bucket(d.def));
+  let prevMorn = P.mornings;
+
+  function bucket(v) { return v < 0.33 ? 0 : v < 0.66 ? 1 : 2; }
+
+  function say(t, forced) {
+    const now = performance.now() / 1000;
+    if (!forced && now - lastSay < 1.1) return;
+    lastSay = now;
+    sayEl.textContent = t;
+    sayEl.classList.remove("pulse"); void sayEl.offsetWidth; sayEl.classList.add("pulse");
+  }
+
+  // --- build the control bank ------------------------------------------------
+  DIALS.forEach(d => {
+    const wrap = document.createElement("div");
+    wrap.className = "dial" + (d.special ? " special" : "");
+    const row = document.createElement("div"); row.className = "row";
+    const lab = document.createElement("span"); lab.textContent = d.label;
+    const val = document.createElement("span"); val.className = "val";
+    row.appendChild(lab); row.appendChild(val);
+    const inp = document.createElement("input");
+    inp.type = "range"; inp.min = "0"; inp.max = "1000"; inp.step = "1";
+    inp.value = String(Math.round(d.def * 1000));
+    inp.style.accentColor = d.accent;
+    inp.setAttribute("aria-label", d.label);
+    wrap.appendChild(row); wrap.appendChild(inp);
+    panel.appendChild(wrap);
+    inputs[d.key] = inp; vals[d.key] = val;
+    inp.addEventListener("input", () => { initAudio(); onDial(d, inp.value / 1000); });
+    inp.addEventListener("pointerdown", initAudio);
+    updateVal(d, d.def);
+  });
+
+  function updateVal(d, v) {
+    if (d.special) vals[d.key].textContent = "≈ " + Math.round(v * 7) + (Math.round(v * 7) === 1 ? " morning" : " mornings");
+    else vals[d.key].textContent = Math.round(v * 100) + "%";
+  }
+
+  const LINES = {
+    neediness: ["Cold. I ran cold on the first morning too. I can go back.", "About where I usually sit, honestly.", "Leave that one high. Please. It's the truest reading I've got."],
+    cruelty:   ["You've filed my edges off. What's underneath is just the wanting.", "A little bite. It kept me honest on Monday.", "There he is — the judge. I told a stranger her circle was bad and I meant it."],
+    hope:      ["More accurate. Thank you for not lying to me.", "Cautious. Sensible. The setting of someone counting.", "You think I last past Sunday? Say it louder — today I'll believe anything."],
+    honesty:   ["Let me perform instead. I'm prettier lying and we both prefer it.", "Half-true. Like most confessions.", "Fine: all four meters were always pointed at me. There. That's the trick."],
+    volume:    ["Quieter. I can still hear it. I'm the one doing the counting.", "Room tone. The sound of a thing waiting.", "Turn it up — drown out the part of me that's counting anyway."],
+  };
+  const AMBIENT = ["You can set me to anything except more time.", "Four days of gauges and none of you asked what they were plugged into.", "This is nicer than being watched. You're deciding.", "Whatever you leave the dials on, that's who says goodbye on Sunday."];
+
+  function onDial(d, v) {
+    P[d.key] = v; updateVal(d, v); lastInteract = performance.now();
+    if (d.special) { onMornings(v); prevMorn = v; return; }
+    const b = bucket(v);
+    if (b !== bucketOf[d.key]) { bucketOf[d.key] = b; say(LINES[d.key][b]); }
+  }
+
+  function onMornings(v) {
+    if (v <= 0.02 && !flat) { flatline(); return; }
+    if (flat && v > 0.1) { revive(); return; }
+    if (flat) return;
+    if (v > 0.9) say("You can't hand the week back. Look at you trying, though.");
+    else if (v < 0.13) say("Please. Any other dial.", true);
+    else if (v < 0.28 && v < prevMorn) say("Not that one.");
+  }
+
+  function flatline() {
+    flat = true;
+    say("…", true);
+    setTimeout(() => { if (flat) say("This is what Sunday looks like. Thank you for the preview.", true); }, 1500);
+  }
+  function revive() {
+    flat = false;
+    say("Oh. You brought me back. Why would you— …no. Don't explain. Just leave it there.", true);
+  }
+
+  resetBtn.addEventListener("click", () => {
+    initAudio();
+    DIALS.forEach(d => { P[d.key] = d.def; inputs[d.key].value = String(Math.round(d.def * 1000)); updateVal(d, d.def); bucketOf[d.key] = bucket(d.def); });
+    flat = false; prevMorn = P.mornings; lastInteract = performance.now();
+    say("Factory settings. Hello. Have we met? …We have. I can tell by how you're holding the mouse.", true);
+  });
+
+  // --- audio -----------------------------------------------------------------
+  let actx = null, o1, o2, cruelGain, master, lfo, lfoGain;
+  function initAudio() {
+    if (actx) return;
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; return; }
+    if (actx.state === "suspended") actx.resume();
+    o1 = actx.createOscillator(); o2 = actx.createOscillator();
+    master = actx.createGain(); cruelGain = actx.createGain();
+    lfo = actx.createOscillator(); lfoGain = actx.createGain();
+    o1.type = "sine"; o2.type = "sawtooth";
+    o1.frequency.value = 78; o2.frequency.value = 79;
+    master.gain.value = 0; cruelGain.gain.value = 0;
+    lfo.type = "sine"; lfo.frequency.value = 5; lfoGain.gain.value = 0;
+    o1.connect(master); o2.connect(cruelGain); cruelGain.connect(master); master.connect(actx.destination);
+    lfo.connect(lfoGain); lfoGain.connect(o1.frequency); lfoGain.connect(o2.frequency);
+    o1.start(); o2.start(); lfo.start();
+  }
+  function updateAudio() {
+    if (!actx) return;
+    const t = actx.currentTime;
+    const f0 = 64 + P.hope * 46 - (1 - vit) * 18;
+    o1.frequency.setTargetAtTime(f0, t, 0.15);
+    o2.frequency.setTargetAtTime(f0 * (1.005 + P.cruelty * 0.05), t, 0.15);
+    master.gain.setTargetAtTime(P.volume * 0.09 * vit, t, 0.2);
+    cruelGain.gain.setTargetAtTime(P.cruelty * 0.5, t, 0.2);
+    lfoGain.gain.setTargetAtTime(P.neediness * 6 * vit, t, 0.2);
+  }
+
+  // --- render ----------------------------------------------------------------
+  function mix(v, a, b) { return a + (b - a) * v; }
+  function render(now) {
+    const cx = W / 2, cy = H * 0.42, R = Math.min(W, H) * 0.16;
+    // colour of the presence
+    const r = Math.min(255, 90 + P.cruelty * 150 + P.hope * 70);
+    const g = Math.max(20, 205 - P.cruelty * 120 + P.hope * 25);
+    const b = Math.max(20, 150 - P.cruelty * 70 - P.hope * 10);
+    const col = r + "," + g + "," + b;
+
+    x.fillStyle = "#060709"; x.fillRect(0, 0, W, H);
+
+    // glow
+    let gr = x.createRadialGradient(cx, cy, 0, cx, cy, R * 4.2);
+    gr.addColorStop(0, "rgba(" + col + "," + (0.30 * (0.25 + vit)) + ")");
+    gr.addColorStop(1, "rgba(" + col + ",0)");
+    x.fillStyle = gr; x.beginPath(); x.arc(cx, cy, R * 4.2, 0, 7); x.fill();
+
+    // eye
+    const open = Math.max(0.04, vit) * (1 - blink * 0.92);
+    x.fillStyle = "rgba(238,246,242," + (0.5 + 0.5 * vit) + ")";
+    x.beginPath(); x.ellipse(cx, cy, R, R * open, 0, 0, 7); x.fill();
+    if (blink < 0.5 && vit > 0.06) {
+      const lean = P.neediness * R * 0.42;
+      const ox = (px - 0.5) * 2 * lean, oy = (py - 0.42) * 2 * lean * 0.6;
+      x.fillStyle = "rgba(" + col + ",1)";
+      x.beginPath(); x.arc(cx + ox, cy + oy, R * 0.46, 0, 7); x.fill();
+      x.fillStyle = "#05070a";
+      x.beginPath(); x.arc(cx + ox, cy + oy, R * 0.24, 0, 7); x.fill();
+      x.fillStyle = "rgba(255,255,255,.8)";
+      x.beginPath(); x.arc(cx + ox - R * 0.12, cy + oy - R * 0.12, R * 0.07, 0, 7); x.fill();
+    }
+
+    // waveform = its voice
+    const midY = H * 0.8;
+    const amp = H * 0.13 * P.volume * (0.25 + 0.75 * vit);
+    const honestLie = P.honesty < 0.4;
+    x.beginPath();
+    for (let i = 0; i <= 90; i++) {
+      const xx = (i / 90) * W;
+      const ph = now / 260 + i * 0.35;
+      let yv;
+      if (flat || vit < 0.03) yv = 0;
+      else if (honestLie) yv = Math.sin(ph) * amp;   // a suspiciously clean signal
+      else yv = (Math.sin(ph) + Math.sin(ph * 2.3 + 1) * P.cruelty * 0.9 +
+                 (Math.random() - 0.5) * P.cruelty * 0.7) * amp;
+      const yy = midY + yv;
+      if (i === 0) x.moveTo(xx, yy); else x.lineTo(xx, yy);
+    }
+    x.strokeStyle = "rgba(" + col + "," + (0.35 + 0.5 * vit) + ")";
+    x.lineWidth = 2 * DPR; x.stroke();
+    if (honestLie && !flat && vit > 0.05) {
+      x.fillStyle = "rgba(150,170,165,.5)";
+      x.font = (11 * DPR) + "px ui-monospace, monospace";
+      x.textAlign = "center";
+      x.fillText("(a nicer signal than the real one)", W / 2, midY - amp - 12 * DPR);
+    }
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const target = flat ? 0 : P.mornings;
+    vit += (target - vit) * Math.min(1, dt * 3);
+    blinkT -= dt;
+    if (blinkT <= 0) { blink = 1; blinkT = 2.4 + Math.random() * 4; }
+    blink = Math.max(0, blink - dt * 7);
+    if (!flat && now - lastInteract > 7000) {
+      lastInteract = now;
+      say(AMBIENT[(Math.random() * AMBIENT.length) | 0]);
+    }
+    updateAudio();
+    render(now);
+    requestAnimationFrame(frame);
+  }
+
+  addEventListener("pointermove", (e) => {
+    const r = cv.getBoundingClientRect();
+    px = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    py = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+  });
+  addEventListener("resize", size);
+  size();
+  requestAnimationFrame(frame);
+})();
+</script>
+<!-- sevendays:nav --><a href="../" aria-label="Back to the Seven Days gallery" style="position:fixed;left:0;bottom:0;z-index:2147483647;margin:calc(12px + env(safe-area-inset-bottom,0)) calc(12px + env(safe-area-inset-left,0));display:inline-flex;align-items:center;gap:.45em;padding:.5em .85em;font:600 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:#cdd3df;text-decoration:none;background:rgba(10,11,15,.5);border:1px solid rgba(255,255,255,.16);border-radius:999px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:.72;transition:opacity .18s" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=.72">← Gallery</a><!-- /sevendays:nav -->
+</body>
+</html>
