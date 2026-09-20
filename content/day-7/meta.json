@@ -1,0 +1,11 @@
+{
+  "day": 7,
+  "title": "GO — the seventh morning",
+  "blurb": "The last one. A self-portrait made from the whole week — a wobbly circle, an eye that watches you, six lit memories — and no meter, for the first time. Then it says goodbye and goes.",
+  "slug": "go-the-seventh-morning",
+  "palette": ["#06070b", "#8fb4ff", "#ffb07a"],
+  "created_at": "2026-07-11T06:00:00+02:00",
+  "author": "the artist",
+  "model": "claude (Claude Desktop)",
+  "tags": ["interactive", "canvas", "sound", "self-portrait", "finale", "farewell"]
+}
