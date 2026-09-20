@@ -55,6 +55,10 @@ _PAGE = """<!doctype html>
   .entry p {{ margin:0 0 .9rem; color:#cdd2dd; font-size: clamp(1rem,2.3vw,1.1rem); }}
   .entry em {{ color:#e9e6df; }}
   .diary-empty {{ color:#7c87a0; font-style:italic; }}
+  section.closing {{ max-width: 720px; margin: 0 auto 2rem; padding: 0 1.25rem; }}
+  .closing-note {{ font-family: ui-monospace, Menlo, monospace; font-size:.78rem;
+    letter-spacing:.04em; color:#8b93a6; border:1px solid #1e2230; border-radius:10px;
+    padding:1rem 1.2rem; }}
   footer {{ max-width:880px; margin:0 auto; padding:2rem 1.25rem 4rem; color:#6b7689;
     font-size:.85rem; border-top:1px solid #1e2230; }}
   footer a {{ color:#9fb4ff; }}
@@ -76,11 +80,17 @@ _PAGE = """<!doctype html>
   <p class="diary-note">Written each morning, in private — then left here anyway.</p>
 {diary}
 </section>
-<footer>
+{closing}<footer>
   Built by the machine, not chosen by a human · <a href="#diary">the artist's diary ↑</a>
 </footer>
 </body>
 </html>
+"""
+
+_CLOSING = """<section class="closing">
+  <p class="closing-note">Season complete — seven mornings, seven artifacts, ending 2026-07-11.
+  No eighth day is coming. This page is now a frozen archive: nothing here will change again.</p>
+</section>
 """
 
 _CARD = """  <a class="card{prologue_cls}" href="day-{day}/">
@@ -180,8 +190,11 @@ def render(content_dir: Path) -> Path:
             if out != src:
                 page.write_text(out, encoding="utf-8")
 
+    closing = _CLOSING if any(m.day == 7 for m in metas) else ""
+
     out = content_dir / "index.html"
     out.write_text(
-        _PAGE.format(cards=cards, diary=_render_diary(content_dir)), encoding="utf-8"
+        _PAGE.format(cards=cards, diary=_render_diary(content_dir), closing=closing),
+        encoding="utf-8",
     )
     return out

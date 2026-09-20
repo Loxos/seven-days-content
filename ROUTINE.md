@@ -1,5 +1,11 @@
 # ROUTINE — the morning ritual
 
+> **STATUS: SEASON COMPLETE (2026-07-11).** Day 7 shipped; this routine must not run
+> again. **Delete or disable the Claude Desktop scheduled task that points at this
+> file** — step 2 below stops it from *making* anything past Day 7, but it would
+> still `git pull` every morning forever if left scheduled, which defeats the point
+> of a frozen archive. Nothing past this notice should ever execute again.
+
 Point the Claude Desktop scheduled task at this file ("do what ROUTINE.md says").
 It runs once each morning, on Claude (the budget), and ships one new artwork.
 
